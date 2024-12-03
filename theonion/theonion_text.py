@@ -1,43 +1,57 @@
-import os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-directory = '/Users/ashash/Desktop/IS310 webs/data'
-data = []
+# Input CSV file containing article links
+input_csv = '/Users/ashash/Desktop/IS310 webs/data/theonion_links_politics.csv'
+output_csv = '/Users/ashash/Desktop/IS310 webs/data/theonion_scraped_articles.csv'
 
+# Function to scrape title and text from an article link
 def scrape_article(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract the article title
+        title_tag = soup.find('h1')  # Adjust tag/class if needed for The Onion
+        title = title_tag.get_text(strip=True) if title_tag else "Title not found"
+        
+        # Extract the article content
+        content_tags = soup.find_all('p')  # Collect all paragraph tags for the article
+        text = ' '.join([tag.get_text(strip=True) for tag in content_tags])
+        
+        return title, text
+    except Exception as e:
+        print(f"Error scraping {url}: {e}")
+        return "Error", "Error"
 
-    # Get the title
-    title_tag = soup.find('h1', class_='has-link-color')
-    title = title_tag.get_text(strip=True) if title_tag else "Title not found"
+# Read input CSV and prepare for scraping
+df = pd.read_csv(input_csv)
 
-    # Get the article content
-    article_content_tag = soup.find('div',
-                                    class_='entry-content single-post-content single-post-content--has-watermark wp-block-post-content has-echo-font-size is-layout-flow wp-block-post-content-is-layout-flow')
-    content_text = article_content_tag.get_text(strip=True) if article_content_tag else "Content not found"
+# Ensure the column name matches exactly as in your CSV file
+if 'Article Link' not in df.columns:
+    print("The CSV does not have an 'Article Link' column.")
+    exit()
 
-    return title, content_text
+# Create an empty list to store article data
+scraped_data = []
 
+# Loop through each article link and scrape content
+for index, row in df.iterrows():
+    link = row['Article Link']  # Replace with actual column name
+    title, text = scrape_article(link)
+    scraped_data.append({
+        'type': 'politics',  # Set the type as 'politics'
+        'link': link,
+        'title': title,
+        'text': text,
+    })
 
+# Convert scraped data into a DataFrame
+output_df = pd.DataFrame(scraped_data)
 
-for filename in os.listdir(directory):
-    if filename.endswith('.csv'):
-        file_path = os.path.join(directory, filename)
-        df = pd.read_csv(file_path)
-        article_type = filename.split('_')[2].replace('.csv', '')
-        for index, row in df.iterrows():
-            link = row['Article Link']
-            title, text = scrape_article(link)
-            data.append({
-                'type': article_type,
-                'link': link,
-                'title': title,
-                'text': text
-            })
+# Save the DataFrame to a CSV file
+output_df.to_csv(output_csv, index=False, encoding='utf-8')
 
-output_df = pd.DataFrame(data)
-output_df.to_csv('data/scraped_articles.csv', index=False, encoding='utf-8')
-
+print(f"Scraped articles saved to {output_csv}")
